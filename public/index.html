@@ -48,7 +48,14 @@ main{flex:1;display:flex;gap:12px;padding:0 12px 12px;overflow:hidden;max-width:
 .srow b{color:var(--accent);}
 .chat{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 .msgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px;}
-.msg{font-size:.85rem;line-height:1.3;overflow-wrap:anywhere;}
+.msg{font-size:.85rem;line-height:1.3;overflow-wrap:anywhere;display:flex;align-items:flex-start;gap:6px;}
+.msg .mbody{flex:1;}
+.delBtn{background:none;border:none;cursor:pointer;opacity:.55;padding:0 4px;font-size:.8rem;}
+.delBtn:hover{opacity:1;}
+.usersList{max-height:150px;overflow-y:auto;margin-top:6px;}
+.urow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--panel2);font-size:.85rem;gap:8px;}
+.urow .uname{overflow-wrap:anywhere;}
+.kickBtn{padding:4px 10px;font-size:.75rem;}
 .msg .who{color:var(--accent2);font-weight:700;}
 .msg.correct{background:rgba(94,230,200,.15);border-radius:8px;padding:4px 8px;color:var(--good);font-weight:700;}
 .inputrow{display:flex;gap:8px;margin-top:8px;}
@@ -90,7 +97,7 @@ body[data-role="wordonly"] .word-only-screen{display:flex;}
   <h2>🖍️ Guess The Word</h2>
   <p>Enter your name and the access code to join the lobby.</p>
   <input id="joinNameInput" placeholder="Your name" maxlength="24">
-  <input id="joinCodeInput" placeholder="Access code">
+  <input id="joinCodeInput" type="password" placeholder="Access code" autocomplete="off">
   <div id="joinError"></div>
   <button class="btn" id="joinSubmitBtn" style="width:240px">Join</button>
 </div>
@@ -156,6 +163,9 @@ body[data-role="wordonly"] .word-only-screen{display:flex;}
       <textarea id="wordsArea" placeholder="One word per line"></textarea>
       <button class="btn secondary" id="saveWords" style="margin-top:8px;width:100%">Save word list</button>
 
+      <label>Players online</label>
+      <div class="usersList" id="usersList"><div class="status">Nobody yet.</div></div>
+
       <button class="btn danger" id="clearChatBtn" style="margin-top:14px;width:100%">🧹 Clear Chat History</button>
       <button class="btn roleBtn" id="controlClose" style="margin-top:10px">Close</button>
     </div>
@@ -201,6 +211,7 @@ body[data-role="wordonly"] .word-only-screen{display:flex;}
 const ROLE_KEY='ggw_role', NAME_KEY='ggw_name', CODE_KEY='ggw_code', WORDPW_KEY='ggw_wordpw';
 let ws, latestState=null, currentWords=[], currentRoundSeconds=90, currentAccessCode='', currentRequiredCorrect=3, currentHintInterval=10;
 let controlUnlocked=false, lastPassword=null;
+let latestChat=[], usersList=[], selfId=null;
 let myName=null, myAccessCode=null, joined=false;
 
 function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -276,7 +287,20 @@ function handleMessage(msg){
       let pw=null; try{ pw=localStorage.getItem(WORDPW_KEY); }catch(e){}
       if(pw) authWordViewer(pw);
     }
+    // After a reconnect the new socket isn't a host socket yet, so re-unlock it.
+    if(controlUnlocked && lastPassword && ws && ws.readyState===WebSocket.OPEN){
+      ws.send(JSON.stringify({type:'auth', password:lastPassword, scope:'control'}));
+    }
   }
+  else if(msg.type==='kicked'){
+    joined=false; controlUnlocked=false;
+    try{ localStorage.removeItem(CODE_KEY); }catch(e){}
+    if(ws) ws.close();
+    document.body.removeAttribute('data-joined');
+    myAccessCode='';
+    showJoinGate('You were removed from the lobby by the host.');
+  }
+  else if(msg.type==='users'){ usersList=msg.users||[]; selfId=msg.selfId; renderUsers(); }
   else if(msg.type==='join_fail'){
     try{ localStorage.removeItem(CODE_KEY); }catch(e){}
     showJoinGate(msg.reason || 'Could not join.');
@@ -296,7 +320,7 @@ function handleMessage(msg){
   }
   else if(msg.type==='auth_ok'){
     if(msg.scope==='word'){ /* word-viewer scope: no full control unlocked */ }
-    else { controlUnlocked=true; currentWords=msg.words; currentRoundSeconds=msg.roundSeconds; currentAccessCode=msg.accessCode||''; currentRequiredCorrect=msg.requiredCorrect||3; currentHintInterval=msg.hintIntervalSeconds||10; showControlStep(); }
+    else { controlUnlocked=true; currentWords=msg.words; currentRoundSeconds=msg.roundSeconds; currentAccessCode=msg.accessCode||''; currentRequiredCorrect=msg.requiredCorrect||3; currentHintInterval=msg.hintIntervalSeconds||10; showControlStep(); renderMessages(latestChat); }
   }
   else if(msg.type==='auth_fail'){ document.getElementById('eyePwError').textContent='Incorrect password.'; }
   else if(msg.type==='control_state'){ renderControlStatus(msg); renderWordOnly(msg); }
@@ -345,13 +369,26 @@ function renderControlStatus(cs){
   }
 }
 
+function renderUsers(){
+  const el=document.getElementById('usersList');
+  if(!el) return;
+  const others = usersList;
+  el.innerHTML = others.length ? others.map(u=>
+    `<div class="urow"><span class="uname">${escapeHtml(u.name)}${u.id===selfId?' (you)':''}</span>`+
+    (u.id===selfId ? '' : `<button class="btn danger kickBtn" data-id="${u.id}" data-name="${escapeHtml(u.name)}">Kick</button>`)+
+    `</div>`).join('') : '<div class="status">Nobody yet.</div>';
+}
+
 function renderMessages(entries){
+  latestChat = entries || [];
   const msgsEl=document.getElementById('msgs');
+  entries = latestChat;
   msgsEl.innerHTML = entries.map(m=>{
     const cls = m.correct ? 'msg correct' : 'msg';
     const rankLabel = m.rank===1?'1st':m.rank===2?'2nd':m.rank===3?'3rd':(m.rank?`${m.rank}th`:'');
     const line = m.correct ? `🎉 ${escapeHtml(m.name)} guessed it! (${rankLabel} — +${m.points} pts)` : `<span class="who">${escapeHtml(m.name)}:</span> ${escapeHtml(m.text)}`;
-    return `<div class="${cls}">${line}</div>`;
+    const del = controlUnlocked ? `<button class="delBtn" data-id="${m.id}" title="Delete this message">🗑️</button>` : '';
+    return `<div class="${cls}"><span class="mbody">${line}</span>${del}</div>`;
   }).join('');
   msgsEl.scrollTop = msgsEl.scrollHeight;
 }
@@ -488,6 +525,16 @@ function initEyeUI(){
   });
 }
 initEyeUI();
+
+document.getElementById('msgs').addEventListener('click', e=>{
+  const b=e.target.closest('.delBtn');
+  if(b && ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'delete_message', id:Number(b.dataset.id)}));
+});
+document.getElementById('usersList').addEventListener('click', e=>{
+  const b=e.target.closest('.kickBtn');
+  if(!b || !ws || ws.readyState!==WebSocket.OPEN) return;
+  if(confirm('Kick ' + (b.dataset.name || 'this player') + ' from the lobby?')) ws.send(JSON.stringify({type:'kick_user', id:Number(b.dataset.id)}));
+});
 
 function initWordOnlyUI(){
   document.getElementById('wordOnlyStartBtn').onclick=()=>{ if(ws) ws.send(JSON.stringify({type:'start_round'})); };

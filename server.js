@@ -38,7 +38,16 @@ const server = http.createServer((req, res) => {
 });
 
 const wss = new WebSocket.Server({ server });
-const clients = new Set(); // { ws, name, isControl, isWordViewer, joined }
+const clients = new Set(); // { id, ws, name, isControl, isWordViewer, joined }
+let nextClientId = 1;
+let nextMsgId = 1;
+
+// Tell every host (control-unlocked) screen who is currently in the lobby.
+function sendUsersList() {
+  const users = [];
+  for (const c of clients) if (c.joined) users.push({ id: c.id, name: c.name });
+  for (const c of clients) if (c.joined && c.isControl) send(c.ws, { type: 'users', users, selfId: c.id });
+}
 
 function send(ws, obj) { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
 function broadcast(obj) {
@@ -131,7 +140,7 @@ setInterval(() => {
 }, 1000);
 
 wss.on('connection', (ws) => {
-  const meta = { ws, name: 'Player', isControl: false, isWordViewer: false, joined: false };
+  const meta = { id: nextClientId++, ws, name: 'Player', isControl: false, isWordViewer: false, joined: false };
   clients.add(meta);
 
   ws.on('message', (raw) => {
@@ -146,6 +155,7 @@ wss.on('connection', (ws) => {
       }
       meta.name = (msg.name || 'Player').toString().slice(0, 24).trim() || 'Player';
       meta.joined = true;
+      sendUsersList();
       send(ws, { type: 'join_ok' });
       send(ws, { type: 'chat', entries: chatLog.slice(-60) });
       send(ws, { type: 'scores', list: Object.entries(scores).map(([name, score]) => ({ name, score })).sort((a, b) => b.score - a.score) });
@@ -182,7 +192,7 @@ wss.on('connection', (ws) => {
         const points = pointsForRank(rank);
         state.correctGuessers.push({ name: meta.name, rank, points });
         scores[meta.name] = (scores[meta.name] || 0) + points;
-        chatLog.push({ name: meta.name, text, ts: Date.now(), correct: true, rank, points });
+        chatLog.push({ id: nextMsgId++, name: meta.name, text: '', ts: Date.now(), correct: true, rank, points }); // no answer text stored, so it can't leak
         if (chatLog.length > 300) chatLog = chatLog.slice(-200);
         broadcastChat();
         broadcastScores();
@@ -192,7 +202,7 @@ wss.on('connection', (ws) => {
           broadcastState();
         }
       } else {
-        chatLog.push({ name: meta.name, text, ts: Date.now(), correct: false });
+        chatLog.push({ id: nextMsgId++, name: meta.name, text, ts: Date.now(), correct: false });
         if (chatLog.length > 300) chatLog = chatLog.slice(-200);
         broadcastChat();
       }
@@ -205,6 +215,7 @@ wss.on('connection', (ws) => {
           accessCode: config.accessCode, requiredCorrect: config.requiredCorrect, hintIntervalSeconds: config.hintIntervalSeconds
         });
         sendControlStates();
+        sendUsersList();
       } else {
         send(ws, { type: 'auth_fail' });
       }
@@ -248,10 +259,29 @@ wss.on('connection', (ws) => {
         chatLog = [];
         broadcastChat();
       }
+    } else if (msg.type === 'delete_message') {
+      if (meta.isControl) {
+        const id = parseInt(msg.id, 10);
+        const before = chatLog.length;
+        chatLog = chatLog.filter(m => m.id !== id);
+        if (chatLog.length !== before) broadcastChat();
+      }
+    } else if (msg.type === 'kick_user') {
+      if (meta.isControl) {
+        const id = parseInt(msg.id, 10);
+        for (const c of clients) {
+          if (c.id === id && c !== meta) {
+            send(c.ws, { type: 'kicked' });
+            c.joined = false; // stop sending/receiving anything else right away
+            c.ws.close();
+          }
+        }
+        sendUsersList();
+      }
     }
   });
 
-  ws.on('close', () => clients.delete(meta));
+  ws.on('close', () => { clients.delete(meta); sendUsersList(); });
 });
 
 server.listen(PORT, () => {
