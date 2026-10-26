@@ -1,0 +1,22 @@
+{
+  "name": "guess-the-word-server",
+  "description": "Self-hosted Skribbl-style word guessing game with a real backend (WebSocket + Node.js).",
+  "repository": "",
+  "keywords": ["node", "websocket", "game", "classroom"],
+  "env": {
+    "ADMIN_PASSWORD": {
+      "description": "Password for the host/control panels (⚙️ and 👁️).",
+      "value": "itsme"
+    },
+    "DEFAULT_ACCESS_CODE": {
+      "description": "Code players must enter to join the lobby. Leave blank to allow anyone in with just a name.",
+      "value": "guess123"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}

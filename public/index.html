@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guess The Word</title>
+<style>
+:root{
+  --bg:#1e2a4a; --panel:#243357; --panel2:#2c3d67; --accent:#ffcf4d; --accent2:#5ee6c8;
+  --text:#f2f5ff; --muted:#9aa7cf; --danger:#ff6b6b; --good:#5ee6c8;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;background:var(--bg);}
+body{margin:0;color:var(--text);font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+  display:flex;flex-direction:column;height:100%;overscroll-behavior:none;}
+body:not([data-joined]) header, body:not([data-joined]) main{display:none;}
+body[data-joined] #joinGate{display:none;}
+#joinGate{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:12px;padding:20px;text-align:center;}
+#joinGate h2{margin:0;}
+#joinGate p{color:var(--muted);font-size:.9rem;max-width:300px;margin:4px 0 6px;}
+#joinGate input{width:240px;border-radius:10px;border:1px solid var(--panel2);background:var(--panel2);
+  color:var(--text);padding:10px 12px;font-size:.9rem;}
+#joinError{color:var(--danger);font-size:.85rem;min-height:1.2em;}
+header{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:1.05rem;margin:0;}
+.headerBtns{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+#gearBtn,#eyeBtn{background:none;color:var(--muted);font-size:1.2rem;padding:4px 8px;border:none;cursor:pointer;}
+button{cursor:pointer;border:none;border-radius:10px;font-weight:600;font-family:inherit;}
+.btn{background:var(--accent2);color:#06261f;padding:8px 14px;font-size:.85rem;}
+.btn.secondary{background:var(--panel2);color:var(--text);}
+.btn.danger{background:var(--danger);color:#2a0606;}
+.btn:disabled{opacity:.45;cursor:default;}
+main{flex:1;display:flex;gap:12px;padding:0 12px 12px;overflow:hidden;max-width:1100px;margin:0 auto;width:100%;}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0;}
+.left{flex:2;}
+.right{flex:1;min-width:220px;}
+.panel{background:var(--panel);border-radius:16px;padding:14px;}
+.game-panel{text-align:center;}
+.game-title{letter-spacing:.12em;font-weight:800;color:var(--muted);font-size:.85rem;}
+.count{font-size:.7rem;vertical-align:super;color:var(--accent);font-weight:700;}
+.blanks{font-size:1.6rem;font-weight:800;letter-spacing:.35em;margin:14px 0;white-space:nowrap;overflow-x:hidden;}
+.status{font-size:.8rem;color:var(--muted);min-height:1.2em;}
+.winner{color:var(--good);font-weight:700;}
+.scorebox{overflow-y:auto;flex:1;}
+.scorebox h3{margin:0 0 8px;font-size:.85rem;color:var(--muted);}
+.srow{display:flex;justify-content:space-between;padding:5px 0;font-size:.85rem;border-bottom:1px solid var(--panel2);}
+.srow b{color:var(--accent);}
+.chat{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.msgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px;}
+.msg{font-size:.85rem;line-height:1.3;overflow-wrap:anywhere;}
+.msg .who{color:var(--accent2);font-weight:700;}
+.msg.correct{background:rgba(94,230,200,.15);border-radius:8px;padding:4px 8px;color:var(--good);font-weight:700;}
+.inputrow{display:flex;gap:8px;margin-top:8px;}
+.inputrow input{flex:1;border-radius:10px;border:1px solid var(--panel2);padding:10px 12px;background:var(--panel2);
+  color:var(--text);font-size:.9rem;}
+.inputrow input:focus{outline:2px solid var(--accent2);}
+@media (max-width:720px){ main{flex-direction:column;overflow-y:auto;} .right{min-width:0;} .scorebox{max-height:160px;} }
+
+body:not([data-role]) .manager-only, body:not([data-role]) .player-only, body:not([data-role]) .hostview{display:none;}
+body[data-role="player"] .hostview{display:none!important;}
+body[data-role="manager"] .player-only{display:none!important;}
+body[data-role="manager"] .blanks{font-size:3rem;letter-spacing:.4em;}
+body[data-role="manager"] .game-title{font-size:1.1rem;}
+body[data-role="wordonly"] main{display:none;}
+.word-only-screen{display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:20px;}
+body[data-role="wordonly"] .word-only-screen{display:flex;}
+.word-only-label{color:var(--muted);letter-spacing:.15em;font-weight:700;font-size:.9rem;margin-bottom:14px;}
+.word-only-text{font-size:2.4rem;font-weight:800;color:var(--accent);white-space:nowrap;overflow-x:hidden;}
+
+.modalOverlay{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:none;
+  align-items:center;justify-content:center;padding:20px;}
+.modalBox{background:var(--panel);border-radius:16px;padding:22px;width:100%;max-width:340px;text-align:center;
+  max-height:90vh;overflow-y:auto;}
+.modalBox h3{margin:0 0 6px;}
+.modalBox p{color:var(--muted);font-size:.85rem;margin:8px 0;}
+.modalBox input[type=password],.modalBox input[type=number],.modalBox input[type=text]{width:100%;border-radius:10px;
+  border:1px solid var(--panel2);background:var(--panel2);color:var(--text);padding:10px 12px;font-size:.9rem;margin-bottom:10px;}
+.roleBtn{padding:12px 18px;font-size:.9rem;border-radius:12px;width:100%;margin-bottom:8px;}
+.control-panel{text-align:left;}
+.control-panel h3, .control-panel .status{text-align:center;}
+.control-panel label{display:block;font-size:.8rem;color:var(--muted);margin-top:10px;}
+.control-panel textarea{width:100%;min-height:110px;margin-top:6px;border-radius:10px;border:1px solid var(--panel2);
+  background:var(--panel2);color:var(--text);padding:10px;font-size:.85rem;font-family:inherit;}
+</style>
+</head>
+<body>
+
+<div id="joinGate">
+  <h2>🖍️ Guess The Word</h2>
+  <p>Enter your name and the access code to join the lobby.</p>
+  <input id="joinNameInput" placeholder="Your name" maxlength="24">
+  <input id="joinCodeInput" placeholder="Access code">
+  <div id="joinError"></div>
+  <button class="btn" id="joinSubmitBtn" style="width:240px">Join</button>
+</div>
+
+<header>
+  <h1>🖍️ Guess The Word</h1>
+  <div class="headerBtns">
+    <button id="gearBtn" title="Screen settings">⚙️</button>
+    <button id="eyeBtn" title="Host controls">👁️</button>
+  </div>
+</header>
+
+<div class="modalOverlay" id="settingsModal">
+  <div class="modalBox">
+    <div id="pwStep">
+      <h3>🔒 Screen Settings</h3>
+      <p>Enter the password to set what this screen shows.</p>
+      <input type="password" id="pwInput" placeholder="Password">
+      <div id="pwError" class="status" style="color:var(--danger);margin-bottom:8px"></div>
+      <button class="btn roleBtn" id="pwSubmit">Unlock</button>
+      <button class="btn secondary roleBtn" id="pwCancel">Cancel</button>
+    </div>
+    <div id="adminStep" style="display:none">
+      <h3>Choose Screen Role</h3>
+      <button class="btn roleBtn" id="setManagerBtn">📺 Manager (projector)</button>
+      <button class="btn secondary roleBtn" id="setWordOnlyBtn">🔍 Word Only (mobile)</button>
+      <button class="btn secondary roleBtn" id="setPlayerBtn">📱 Player (phone)</button>
+      <button class="btn roleBtn" id="adminClose" style="margin-top:6px">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalOverlay" id="eyeModal">
+  <div class="modalBox" style="max-width:380px">
+    <div id="eyePwStep">
+      <h3>👁️ Host Controls</h3>
+      <p>Enter the password to control the game.</p>
+      <input type="password" id="eyePwInput" placeholder="Password">
+      <div id="eyePwError" class="status" style="color:var(--danger);margin-bottom:8px"></div>
+      <button class="btn roleBtn" id="eyePwSubmit">Unlock</button>
+      <button class="btn secondary roleBtn" id="eyePwCancel">Cancel</button>
+    </div>
+    <div id="controlStep" style="display:none" class="control-panel">
+      <h3>Round Control</h3>
+      <div class="status" id="controlStatus">Loading…</div>
+      <button class="btn" id="startBtn" style="margin-top:10px;width:100%">Start Round</button>
+
+      <label for="durationInput">Round duration (seconds)</label>
+      <input type="number" id="durationInput" min="20" max="600" step="5" value="90">
+      <button class="btn secondary" id="saveDuration" style="margin-top:8px;width:100%">Save duration</button>
+
+      <label for="hintIntervalInput">New hint every <span id="hintIntervalVal">10</span>s</label>
+      <input type="range" id="hintIntervalInput" min="3" max="60" step="1" value="10" style="width:100%">
+
+      <label for="requiredCorrectInput">End round after <span id="requiredCorrectVal">3</span> correct guess(es)</label>
+      <input type="range" id="requiredCorrectInput" min="1" max="25" step="1" value="3" style="width:100%">
+
+      <label for="accessCodeInput">Access code (required to join the lobby)</label>
+      <input type="text" id="accessCodeInput" placeholder="Leave blank to allow anyone">
+      <button class="btn secondary" id="saveAccessCode" style="margin-top:8px;width:100%">Save access code</button>
+
+      <label>Shared word list (one per line)</label>
+      <textarea id="wordsArea" placeholder="One word per line"></textarea>
+      <button class="btn secondary" id="saveWords" style="margin-top:8px;width:100%">Save word list</button>
+
+      <button class="btn danger" id="clearChatBtn" style="margin-top:14px;width:100%">🧹 Clear Chat History</button>
+      <button class="btn roleBtn" id="controlClose" style="margin-top:10px">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="word-only-screen" id="wordOnlyScreen">
+  <div class="word-only-label">THE WORD IS</div>
+  <div class="word-only-text" id="wordOnlyText">—</div>
+  <div id="wordOnlyStatus" class="status" style="margin-top:10px"></div>
+  <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;justify-content:center">
+    <button class="btn" id="wordOnlyStartBtn">▶️ Start Round</button>
+    <button class="btn secondary" id="wordOnlyRerollBtn">🔄 Reroll Word</button>
+    <button class="btn danger" id="wordOnlyEndBtn">⏹️ End Round</button>
+  </div>
+</div>
+
+<main>
+  <div class="col left">
+    <div class="panel game-panel hostview">
+      <div class="game-title">GUESS THIS <span class="count" id="lenTag"></span></div>
+      <div class="blanks" id="blanks">— — —</div>
+      <div class="status" id="status">Connecting…</div>
+    </div>
+    <div class="panel chat">
+      <h3 style="margin:0 0 8px;font-size:.85rem;color:var(--muted)">Chat & Guesses</h3>
+      <div class="msgs" id="msgs"></div>
+      <div class="inputrow player-only">
+        <input id="msgInput" placeholder="Type a guess or chat…" maxlength="100">
+        <button class="btn" id="sendBtn">Send</button>
+      </div>
+    </div>
+  </div>
+  <div class="col right hostview">
+    <div class="panel scorebox">
+      <h3>Scoreboard</h3>
+      <div id="scores"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const ROLE_KEY='ggw_role', NAME_KEY='ggw_name', CODE_KEY='ggw_code', WORDPW_KEY='ggw_wordpw';
+let ws, latestState=null, currentWords=[], currentRoundSeconds=90, currentAccessCode='', currentRequiredCorrect=3, currentHintInterval=10;
+let controlUnlocked=false, lastPassword=null;
+let myName=null, myAccessCode=null, joined=false;
+
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function fitToContainer(el){
+  if(!el) return;
+  el.style.fontSize='';
+  const container = el.parentElement;
+  if(!container) return;
+  requestAnimationFrame(()=>{
+    let fontSize = parseFloat(getComputedStyle(el).fontSize);
+    const minSize = 14;
+    let guard = 0;
+    while(el.scrollWidth > container.clientWidth && fontSize > minSize && guard < 60){
+      fontSize -= 1;
+      el.style.fontSize = fontSize + 'px';
+      guard++;
+    }
+  });
+}
+
+function applyRole(r){ document.body.setAttribute('data-role', r); }
+function setRole(r){ try{ localStorage.setItem(ROLE_KEY, r); }catch(e){} applyRole(r); }
+function initRole(){
+  let saved=null; try{ saved=localStorage.getItem(ROLE_KEY); }catch(e){}
+  applyRole((saved==='manager' || saved==='wordonly') ? saved : 'player');
+}
+initRole();
+
+// ---- Join gate: name + access code required before anything else works ----
+function showJoinGate(errorMsg){
+  document.getElementById('joinNameInput').value = myName || '';
+  document.getElementById('joinCodeInput').value = myAccessCode || '';
+  document.getElementById('joinError').textContent = errorMsg || '';
+  document.getElementById('joinGate').style.display='flex';
+}
+function hideJoinGate(){
+  document.body.setAttribute('data-joined','true');
+  document.getElementById('joinGate').style.display='none';
+}
+function attemptJoin(name, code){
+  myName=name; myAccessCode=code;
+  connect();
+}
+document.getElementById('joinSubmitBtn').onclick=()=>{
+  const n=document.getElementById('joinNameInput').value.trim().slice(0,24);
+  const c=document.getElementById('joinCodeInput').value.trim();
+  if(!n){ document.getElementById('joinError').textContent='Please enter a name.'; return; }
+  attemptJoin(n, c);
+};
+document.getElementById('joinCodeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('joinSubmitBtn').click(); });
+
+function connect(){
+  const proto = location.protocol==='https:' ? 'wss://' : 'ws://';
+  ws = new WebSocket(proto + location.host);
+  ws.onopen = ()=>{ ws.send(JSON.stringify({type:'join', name:myName, accessCode:myAccessCode})); };
+  ws.onmessage = (e)=>{ let msg; try{ msg=JSON.parse(e.data); }catch(err){ return; } handleMessage(msg); };
+  ws.onclose = ()=>{
+    if(joined){
+      joined=false;
+      document.getElementById('status').textContent='Disconnected — reconnecting…';
+      setTimeout(()=>attemptJoin(myName,myAccessCode), 1500);
+    }
+  };
+}
+
+function handleMessage(msg){
+  if(msg.type==='join_ok'){
+    joined=true;
+    try{ localStorage.setItem(NAME_KEY,myName); localStorage.setItem(CODE_KEY,myAccessCode); }catch(e){}
+    hideJoinGate();
+    if(document.body.getAttribute('data-role')==='wordonly'){
+      let pw=null; try{ pw=localStorage.getItem(WORDPW_KEY); }catch(e){}
+      if(pw) authWordViewer(pw);
+    }
+  }
+  else if(msg.type==='join_fail'){
+    try{ localStorage.removeItem(CODE_KEY); }catch(e){}
+    showJoinGate(msg.reason || 'Could not join.');
+  }
+  else if(msg.type==='state'){ latestState=msg; renderGamePanel(); updateInputLock(); }
+  else if(msg.type==='chat_blocked'){ updateInputLock(); }
+  else if(msg.type==='chat'){ renderMessages(msg.entries); }
+  else if(msg.type==='scores'){ renderScores(msg.list); }
+  else if(msg.type==='config'){
+    currentRoundSeconds=msg.roundSeconds;
+    if(typeof msg.hintIntervalSeconds==='number') currentHintInterval=msg.hintIntervalSeconds;
+    if(controlUnlocked){
+      document.getElementById('durationInput').value=currentRoundSeconds;
+      document.getElementById('hintIntervalInput').value=currentHintInterval;
+      document.getElementById('hintIntervalVal').textContent=currentHintInterval;
+    }
+  }
+  else if(msg.type==='auth_ok'){
+    if(msg.scope==='word'){ /* word-viewer scope: no full control unlocked */ }
+    else { controlUnlocked=true; currentWords=msg.words; currentRoundSeconds=msg.roundSeconds; currentAccessCode=msg.accessCode||''; currentRequiredCorrect=msg.requiredCorrect||3; currentHintInterval=msg.hintIntervalSeconds||10; showControlStep(); }
+  }
+  else if(msg.type==='auth_fail'){ document.getElementById('eyePwError').textContent='Incorrect password.'; }
+  else if(msg.type==='control_state'){ renderControlStatus(msg); renderWordOnly(msg); }
+}
+
+function renderGamePanel(){
+  const blanksEl=document.getElementById('blanks'), statusEl=document.getElementById('status'), lenTag=document.getElementById('lenTag');
+  if(!latestState || !latestState.mask){
+    blanksEl.textContent='— — —'; lenTag.textContent=''; statusEl.textContent='No round yet.';
+    return;
+  }
+  lenTag.textContent = latestState.length || '';
+  blanksEl.textContent = latestState.mask;
+  fitToContainer(blanksEl);
+  if(latestState.active){
+    statusEl.textContent = `Guess in the chat below! (${latestState.correctCount}/${latestState.requiredCorrect} correct so far)`;
+  } else {
+    statusEl.innerHTML = latestState.manuallyEnded ? '🛑 Round ended by host.'
+      : latestState.timedOut ? "⏰ Time's up!"
+      : (latestState.correctCount>0 ? `<span class="winner">🎉 ${latestState.correctCount} player(s) guessed it!</span>` : 'Round ended.');
+  }
+}
+
+function renderWordOnly(cs){
+  const el=document.getElementById('wordOnlyText');
+  if(el){ el.textContent = cs.word || 'No active round.'; fitToContainer(el); }
+  const statusEl=document.getElementById('wordOnlyStatus');
+  if(!statusEl) return;
+  if(!cs.word){ statusEl.textContent='No round yet.'; }
+  else if(cs.active){ statusEl.textContent=`${cs.secondsLeft}s left — ${cs.correctCount}/${cs.requiredCorrect} correct so far`; }
+  else { statusEl.textContent = cs.manuallyEnded ? 'Round ended by host.' : (cs.timedOut ? "Time's up!" : 'Round ended.'); }
+  const startBtn=document.getElementById('wordOnlyStartBtn');
+  if(startBtn) startBtn.disabled = !!cs.active;
+}
+
+function renderControlStatus(cs){
+  const statusEl=document.getElementById('controlStatus'), startBtn=document.getElementById('startBtn');
+  if(!statusEl || !startBtn) return;
+  if(!cs.word){ statusEl.textContent='No round yet — start one!'; startBtn.disabled=false; startBtn.textContent='Start Round'; return; }
+  if(cs.active){
+    statusEl.textContent=`Round in progress — ${cs.secondsLeft}s left, ${cs.correctCount}/${cs.requiredCorrect} correct. Word: ${cs.word}`;
+    startBtn.disabled=true; startBtn.textContent='Round in progress…';
+  } else {
+    const label = cs.manuallyEnded ? `Ended by host. Word was ${cs.word}.` : (cs.timedOut ? `Time's up! Word was ${cs.word}.` : `Round complete (${cs.correctCount} correct). Word was ${cs.word}.`);
+    statusEl.textContent=label; startBtn.disabled=false; startBtn.textContent='Start Next Round';
+  }
+}
+
+function renderMessages(entries){
+  const msgsEl=document.getElementById('msgs');
+  msgsEl.innerHTML = entries.map(m=>{
+    const cls = m.correct ? 'msg correct' : 'msg';
+    const rankLabel = m.rank===1?'1st':m.rank===2?'2nd':m.rank===3?'3rd':(m.rank?`${m.rank}th`:'');
+    const line = m.correct ? `🎉 ${escapeHtml(m.name)} guessed it! (${rankLabel} — +${m.points} pts)` : `<span class="who">${escapeHtml(m.name)}:</span> ${escapeHtml(m.text)}`;
+    return `<div class="${cls}">${line}</div>`;
+  }).join('');
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+function renderScores(list){
+  document.getElementById('scores').innerHTML = list.length ? list.map(r=>
+    `<div class="srow"><span>${escapeHtml(r.name)}</span><b>${r.score}</b></div>`).join('')
+    : '<div class="status">No scores yet.</div>';
+}
+
+function updateInputLock(){
+  const input=document.getElementById('msgInput'), btn=document.getElementById('sendBtn');
+  if(!input || !btn) return;
+  const locked = !!(latestState && latestState.active && Array.isArray(latestState.correctNames) && latestState.correctNames.includes(myName));
+  input.disabled = locked;
+  btn.disabled = locked;
+  input.placeholder = locked ? "You guessed it! Chat is locked until the round ends." : "Type a guess or chat…";
+  if(locked) input.value='';
+}
+
+function handleSend(){
+  const input=document.getElementById('msgInput');
+  const text=input.value.trim();
+  if(!text || !ws || ws.readyState!==WebSocket.OPEN) return;
+  input.value='';
+  ws.send(JSON.stringify({type:'message', text}));
+}
+
+function openSettings(){
+  document.getElementById('settingsModal').style.display='flex';
+  document.getElementById('pwStep').style.display='block';
+  document.getElementById('adminStep').style.display='none';
+  document.getElementById('pwInput').value=''; document.getElementById('pwError').textContent='';
+}
+function closeSettings(){ document.getElementById('settingsModal').style.display='none'; }
+function checkPassword(pw, scope, onOk, onFail){
+  if(!ws || ws.readyState!==WebSocket.OPEN){ onFail(); return; }
+  const handler=(e)=>{
+    let m; try{ m=JSON.parse(e.data); }catch(err){ return; }
+    if(m.type==='auth_ok'){ ws.removeEventListener('message', handler); onOk(); }
+    else if(m.type==='auth_fail'){ ws.removeEventListener('message', handler); onFail(); }
+  };
+  ws.addEventListener('message', handler);
+  ws.send(JSON.stringify({type:'auth', password:pw, scope}));
+}
+
+function initAdminUI(){
+  document.getElementById('gearBtn').onclick=openSettings;
+  document.getElementById('pwCancel').onclick=closeSettings;
+  document.getElementById('adminClose').onclick=closeSettings;
+  document.getElementById('pwSubmit').onclick=()=>{
+    const val=document.getElementById('pwInput').value;
+    checkPassword(val, 'control',
+      ()=>{ lastPassword=val; document.getElementById('pwStep').style.display='none'; document.getElementById('adminStep').style.display='block'; },
+      ()=>{ document.getElementById('pwError').textContent='Incorrect password.'; });
+  };
+  document.getElementById('pwInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('pwSubmit').click(); });
+  document.getElementById('setManagerBtn').onclick=()=>{ setRole('manager'); closeSettings(); };
+  document.getElementById('setPlayerBtn').onclick=()=>{ setRole('player'); closeSettings(); };
+  document.getElementById('setWordOnlyBtn').onclick=()=>{
+    setRole('wordonly');
+    if(lastPassword){ try{ localStorage.setItem(WORDPW_KEY, lastPassword); }catch(e){} authWordViewer(lastPassword); }
+    closeSettings();
+  };
+}
+initAdminUI();
+
+function authWordViewer(pw){ if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'auth', password:pw, scope:'word'})); }
+
+function showControlStep(){
+  document.getElementById('eyePwStep').style.display='none';
+  document.getElementById('controlStep').style.display='block';
+  document.getElementById('wordsArea').value=currentWords.join('\n');
+  document.getElementById('durationInput').value=currentRoundSeconds;
+  document.getElementById('hintIntervalInput').value=currentHintInterval;
+  document.getElementById('hintIntervalVal').textContent=currentHintInterval;
+  document.getElementById('accessCodeInput').value=currentAccessCode;
+  document.getElementById('requiredCorrectInput').value=currentRequiredCorrect;
+  document.getElementById('requiredCorrectVal').textContent=currentRequiredCorrect;
+}
+function openEyeModal(){
+  document.getElementById('eyeModal').style.display='flex';
+  if(controlUnlocked){ showControlStep(); }
+  else {
+    document.getElementById('eyePwStep').style.display='block';
+    document.getElementById('controlStep').style.display='none';
+    document.getElementById('eyePwInput').value=''; document.getElementById('eyePwError').textContent='';
+  }
+}
+function closeEyeModal(){ document.getElementById('eyeModal').style.display='none'; }
+function initEyeUI(){
+  document.getElementById('eyeBtn').onclick=openEyeModal;
+  document.getElementById('eyePwCancel').onclick=closeEyeModal;
+  document.getElementById('controlClose').onclick=closeEyeModal;
+  document.getElementById('eyePwSubmit').onclick=()=>{
+    const val=document.getElementById('eyePwInput').value;
+    checkPassword(val, 'control',
+      ()=>{ lastPassword=val; },
+      ()=>{ document.getElementById('eyePwError').textContent='Incorrect password.'; });
+  };
+  document.getElementById('eyePwInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('eyePwSubmit').click(); });
+  document.getElementById('startBtn').onclick=()=>{ if(ws) ws.send(JSON.stringify({type:'start_round'})); };
+  document.getElementById('saveDuration').onclick=()=>{
+    const secs=parseInt(document.getElementById('durationInput').value,10)||90;
+    if(ws) ws.send(JSON.stringify({type:'set_duration', seconds:secs}));
+  };
+  document.getElementById('saveAccessCode').onclick=()=>{
+    const code=document.getElementById('accessCodeInput').value.trim();
+    if(ws) ws.send(JSON.stringify({type:'set_access_code', code}));
+    currentAccessCode=code;
+  };
+  document.getElementById('saveWords').onclick=()=>{
+    const lines=document.getElementById('wordsArea').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(!lines.length){ alert('Word list cannot be empty.'); return; }
+    if(ws) ws.send(JSON.stringify({type:'set_words', words:lines}));
+  };
+  document.getElementById('clearChatBtn').onclick=()=>{
+    if(confirm('Clear the entire chat history for everyone?') && ws) ws.send(JSON.stringify({type:'clear_chat'}));
+  };
+  document.getElementById('requiredCorrectInput').addEventListener('input', e=>{
+    document.getElementById('requiredCorrectVal').textContent = e.target.value;
+  });
+  document.getElementById('requiredCorrectInput').addEventListener('change', e=>{
+    const n = parseInt(e.target.value,10)||3;
+    currentRequiredCorrect = n;
+    if(ws) ws.send(JSON.stringify({type:'set_required_correct', count:n}));
+  });
+  document.getElementById('hintIntervalInput').addEventListener('input', e=>{
+    document.getElementById('hintIntervalVal').textContent = e.target.value;
+  });
+  document.getElementById('hintIntervalInput').addEventListener('change', e=>{
+    const n = parseInt(e.target.value,10)||10;
+    currentHintInterval = n;
+    if(ws) ws.send(JSON.stringify({type:'set_hint_interval', seconds:n}));
+  });
+}
+initEyeUI();
+
+function initWordOnlyUI(){
+  document.getElementById('wordOnlyStartBtn').onclick=()=>{ if(ws) ws.send(JSON.stringify({type:'start_round'})); };
+  document.getElementById('wordOnlyRerollBtn').onclick=()=>{ if(ws) ws.send(JSON.stringify({type:'reroll_word'})); };
+  document.getElementById('wordOnlyEndBtn').onclick=()=>{ if(ws) ws.send(JSON.stringify({type:'end_round_now'})); };
+}
+initWordOnlyUI();
+
+document.getElementById('sendBtn').onclick=handleSend;
+document.getElementById('msgInput').addEventListener('keydown', e=>{ if(e.key==='Enter') handleSend(); });
+
+// Auto-rejoin with saved credentials if we have them; otherwise show the gate.
+(function(){
+  let savedName=null, savedCode=null;
+  try{ savedName=localStorage.getItem(NAME_KEY); savedCode=localStorage.getItem(CODE_KEY); }catch(e){}
+  if(savedName){ attemptJoin(savedName, savedCode || ''); }
+  else { showJoinGate(); }
+})();
+</script>
+</body>
+</html>
